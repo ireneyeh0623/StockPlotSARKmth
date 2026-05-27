@@ -108,17 +108,23 @@ else:
     st.markdown(f"<h3 style='color: {font_color};'>{search_id}</h3>", unsafe_allow_html=True)
     
     data = yf.download(search_id, start=start_date, end=end_date, auto_adjust=True, interval="1mo")
-    
+
     if not data.empty:
         df = data.copy().reset_index()
-        # 格式化日期(用於 X 軸顯示)：移除 X 軸非交易日空隙的關鍵，先將日期轉為字串
-        # 這樣會顯示成：Nov 02 2022
-        df['Date_Str'] = df['Date'].dt.strftime('%b %Y')
 
-        # 處理 yfinance 可能產生的多層欄位
+        # ★ 修正：必須先處理多層欄位，再存取任何欄位名稱
+        # 新版 yfinance (>= 0.2.x) 單支股票也會回傳 MultiIndex columns
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        
+
+        # ★ 修正：處理日期欄位名稱差異 (月線/日線=Date，分鐘/小時線=Datetime)
+        if 'Datetime' in df.columns and 'Date' not in df.columns:
+            df.rename(columns={'Datetime': 'Date'}, inplace=True)
+
+        # 格式化日期(用於 X 軸顯示)：轉為字串可消除非交易日空隙
+        # 月線只顯示年月，例如：Nov 2022
+        df['Date_Str'] = df['Date'].dt.strftime('%b %Y')
+
         # 展平數據確保計算穩定
         df['Close_1D'] = df['Close'].values.flatten()
         df['High_1D'] = df['High'].values.flatten()
