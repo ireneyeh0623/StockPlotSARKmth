@@ -16,7 +16,7 @@ st.set_page_config(page_title="改良版 SAR 趨勢追蹤系統 (月K線版)", l
 st.sidebar.header("參數設定")
 
 # 股票與日期輸入
-stock_id = st.sidebar.text_input("股票代號(如2330.TW或AAPL)", "2330.TW")
+stock_id = st.sidebar.text_input("股票代號(如2330或AAPL)", "2330")
 start_date = st.sidebar.date_input("起始日期(YYYY/MM/DD)", datetime(2026, 1, 1))
 end_date = st.sidebar.date_input("結束日期(YYYY/MM/DD)", datetime.now())
 
@@ -93,9 +93,6 @@ down_tol = 1 + tolerance_pct / 100  # e.g. 1% → 1.01
 # 定義分析按鈕
 analyze_btn = st.sidebar.button("開始分析")
 
-# 自動處理台股代號 (.TW)
-search_id = f"{stock_id}.TW" if stock_id.isdigit() else stock_id
-
 st.title("🚀 改良版 SAR 趨勢追蹤系統 (月K線版)")
 
 # ==============================================================================
@@ -104,11 +101,21 @@ st.title("🚀 改良版 SAR 趨勢追蹤系統 (月K線版)")
 if not analyze_btn:
     st.info("💡 請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始分析」即可產出圖表")
 else:
-    # 顯示股票代碼
-    st.markdown(f"<h3 style='color: {font_color};'>{search_id}</h3>", unsafe_allow_html=True)
-    
-    data = yf.download(search_id, start=start_date, end=end_date, auto_adjust=True, interval="1mo")
-    
+    # 依序嘗試：原始代號 → .TW → .TWO
+    candidates = [stock_id, f"{stock_id}.TW", f"{stock_id}.TWO"]
+    search_id = None
+    data = pd.DataFrame()
+    for candidate in candidates:
+        temp = yf.download(candidate, start=start_date, end=end_date, auto_adjust=True, interval="1mo")
+        if not temp.empty:
+            search_id = candidate
+            data = temp
+            break
+
+    if search_id:
+        # 顯示股票代碼
+        st.markdown(f"<h3 style='color: {font_color};'>{search_id}</h3>", unsafe_allow_html=True)
+
     if not data.empty:
         df = data.copy()
 
@@ -289,7 +296,7 @@ else:
                 st.markdown(f"### {sar_val:.2f}")
                 
     else:
-        st.error("找不到股票資料，請檢查代號是否正確。")
+        st.error(f"找不到股票資料（已嘗試：{', '.join(candidates)}），請檢查代號或日期。")
 
 # 1.收盤價容許區間：
 #     在上升趨勢中，判斷條件改為 c_close > curr_sar * 0.99。即使盤中低價穿過 SAR，只要收盤沒跌破 SAR 的 99%，趨勢就不會反轉，而是重置計算。
