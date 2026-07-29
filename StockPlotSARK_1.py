@@ -6,14 +6,183 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 # ==============================================================================
-# 1. 系統環境與側邊欄配置
+# 1. 系統環境配置
 # ==============================================================================
 
-# 網頁配置
 st.set_page_config(page_title="改良版 SAR 趨勢追蹤系統 (月K線版)", layout="wide")
 
-# --- 側邊欄：參數設定 ---
-st.sidebar.header("參數設定")
+if "is_dark" not in st.session_state:
+    st.session_state.is_dark = False
+
+# ==============================================================================
+# 2. 視覺設計 Tokens（與 StockPlotSARK_1週線.py 共用同一套 Design Handoff 規格）
+# ==============================================================================
+
+LIGHT_TOKENS = {
+    "bg": "#f3f2f2",
+    "surface_alt": "#f8f7f6",
+    "text": "#201f1d",
+    "text_muted": "rgba(32,31,29,0.55)",
+    "divider": "rgba(32,31,29,0.16)",
+    "accent": "#b68235",
+    "grid_line": "rgba(32,31,29,0.08)",
+    "shadow": "0 3px 10px rgba(45,43,43,0.14)",
+    "candle": {"up": "#8b1e1e", "down": "#1f5c3d"},
+}
+DARK_TOKENS = {
+    "bg": "#17140f",
+    "surface_alt": "#1c1912",
+    "text": "#f3ede2",
+    "text_muted": "rgba(243,237,226,0.6)",
+    "divider": "rgba(243,237,226,0.16)",
+    "accent": "#c99a4e",
+    "grid_line": "rgba(243,237,226,0.12)",
+    "shadow": "0 12px 32px rgba(0,0,0,0.5)",
+    "candle": {"up": "#d0342c", "down": "#2f9d68"},
+}
+
+is_dark = st.session_state.is_dark
+tok = DARK_TOKENS if is_dark else LIGHT_TOKENS
+chart_template = "plotly_dark" if is_dark else "plotly_white"
+# 亮色版 +/- 步進按鈕預設顏色改為白色（僅預設狀態，hover 顏色不變）；深色版維持原本設定
+step_btn_color = "#FFFFFF" if not is_dark else tok['text']
+
+# ==============================================================================
+# 3. 全域樣式（字型／配色／按鈕／輸入框／側邊欄版面）
+# ==============================================================================
+
+st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Lora:wght@400;600&display=swap');
+
+    html, body, [class*="css"] {{ font-family: 'Lora', serif; }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Cormorant Garamond', serif !important;
+        font-weight: 600 !important;
+    }}
+
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background-color: {tok['bg']} !important;
+        color: {tok['text']} !important;
+    }}
+    [data-testid="stHeader"] {{ background-color: transparent !important; }}
+
+    /* 側邊欄版面 */
+    [data-testid="stSidebar"] {{
+        background-color: {tok['bg']} !important;
+        border-right: 1px solid {tok['divider']};
+        min-width: 300px !important;
+        max-width: 300px !important;
+    }}
+    [data-testid="stSidebarUserContent"] {{ padding: 40px 28px !important; }}
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 18px; }}
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
+        font-size: 12px !important;
+        color: {tok['text_muted']} !important;
+        font-family: 'Lora', serif !important;
+    }}
+    [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {{
+        color: {tok['text']};
+    }}
+
+    /* 輸入框：邊框只畫在最外層容器，內層元素一律去邊框/去底色，避免雙層邊框與底色不一致 */
+    [data-testid="stSidebar"] div[data-baseweb="input"] {{
+        border: 1px solid {tok['divider']} !important;
+        border-radius: 4px !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }}
+    [data-testid="stSidebar"] div[data-baseweb="input"] * {{
+        border: none !important;
+        box-shadow: none !important;
+        background-color: transparent !important;
+    }}
+    [data-testid="stSidebar"] div[data-baseweb="input"] input {{
+        color: {tok['text']} !important;
+    }}
+
+    /* 數字輸入框(+/-按鈕)：步進按鈕改為描邊風格，與整體設計語彙一致 */
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepUp"],
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepDown"] {{
+        border-color: {tok['divider']} !important;
+        background-color: transparent !important;
+        color: {step_btn_color} !important;
+        opacity: 1 !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepUp"] svg,
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepDown"] svg {{
+        fill: {step_btn_color} !important;
+        stroke: {step_btn_color} !important;
+        opacity: 1 !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepUp"]:hover,
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepDown"]:hover {{
+        border-color: {tok['accent']} !important;
+        color: {tok['accent']} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepUp"]:hover svg,
+    [data-testid="stSidebar"] [data-testid="stNumberInputStepDown"]:hover svg {{
+        fill: {tok['accent']} !important;
+        stroke: {tok['accent']} !important;
+    }}
+
+    /* 瀏覽器自動填入(autofill)會強制套用自己的底色，一般CSS蓋不掉，需用此專門技巧解除 */
+    [data-testid="stSidebar"] input:-webkit-autofill,
+    [data-testid="stSidebar"] input:-webkit-autofill:hover,
+    [data-testid="stSidebar"] input:-webkit-autofill:focus,
+    [data-testid="stSidebar"] input:-webkit-autofill:active {{
+        -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+        -webkit-text-fill-color: {tok['text']} !important;
+        caret-color: {tok['text']};
+        transition: background-color 9999s ease-in-out 0s;
+    }}
+
+    /* 按鈕：設計系統一律採 outline 樣式，不使用實心填色 */
+    div.stButton > button {{
+        width: 100%;
+        background-color: transparent !important;
+        border-radius: 4px !important;
+        font-family: 'Cormorant Garamond', serif !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        box-shadow: none !important;
+    }}
+    div.stButton > button[kind="secondary"] {{
+        color: {tok['text']} !important;
+        border: 1px solid {tok['divider']} !important;
+    }}
+    div.stButton > button[kind="secondary"]:hover {{
+        border-color: {tok['accent']} !important;
+        color: {tok['accent']} !important;
+    }}
+    div.stButton > button[kind="primary"] {{
+        color: {tok['accent']} !important;
+        border: 1px solid {tok['accent']} !important;
+    }}
+    div.stButton > button[kind="primary"]:hover {{
+        background-color: color-mix(in srgb, {tok['accent']} 12%, transparent) !important;
+    }}
+
+    /* 圖表卡片容器（st.container(border=True)） */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        border: 1px solid {tok['divider']} !important;
+        border-radius: 7px !important;
+        background-color: {tok['surface_alt']} !important;
+        box-shadow: {tok['shadow']};
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 4. 側邊欄：使用者參數輸入區
+# ==============================================================================
+
+st.sidebar.markdown(
+    f"<div style='font-size:12px;letter-spacing:.08em;text-transform:uppercase;"
+    f"color:{tok['text_muted']};margin-bottom:-6px;'>查詢設定</div>",
+    unsafe_allow_html=True,
+)
 
 # 股票與日期輸入
 stock_id = st.sidebar.text_input("股票代號(如2330或AAPL)", "2330")
@@ -23,83 +192,78 @@ end_date = st.sidebar.date_input("結束日期(YYYY/MM/DD)", datetime.now())
 # 自動調整起始日期為每月第一天
 if start_date.day != 1:
     start_date = start_date.replace(day=1)
-    st.sidebar.info(f"起始日期已自動調整為每月第一天：{start_date.strftime('%Y/%m/%d')}")
+    st.sidebar.markdown(
+        f"<div style='font-size:13px;line-height:1.5;padding:10px 12px;"
+        f"border:1px solid {tok['accent']};border-radius:4px;"
+        f"background-color:color-mix(in srgb, {tok['accent']} 12%, transparent);"
+        f"color:{tok['text']};'>起始日期已自動調整為每月第一天：{start_date.strftime('%Y/%m/%d')}</div>",
+        unsafe_allow_html=True,
+    )
 
-# 圖表主題選擇：影響後續 CSS 渲染與 Plotly 模板
-theme_choice = st.sidebar.radio("圖表主題(對應網頁背景)", ["亮色(白色背景)", "深色(深色背景)"])
+st.sidebar.markdown(
+    f"<hr style='border:none;border-top:1px solid {tok['divider']};margin:4px 0;'>",
+    unsafe_allow_html=True,
+)
 
-# ==============================================================================
-# 2. CSS 視覺樣式優化 (強制覆蓋各主題背景色)
-# ==============================================================================
+# SAR 核心參數：AF (加速因子) —— 以 +/- 按鈕(number_input)取代滑桿
+af_start = st.sidebar.number_input(
+    "AF 起始值", min_value=0.01, max_value=0.10, value=0.02, step=0.01, format="%.2f"
+)
+af_max = st.sidebar.number_input(
+    "AF 極限值", min_value=0.10, max_value=0.50, value=0.20, step=0.01, format="%.2f"
+)
 
-if theme_choice == "深色(深色背景)":
-    chart_template = "plotly_dark"
-    font_color = "white"
-    bg_color = "#0E1117"
-    st.markdown("""
-        <style>
-        /* 深色模式：設定側邊欄與背景為深黑色 (#0E1117)，文字為白色 */
-        [data-testid="stSidebar"], .stApp, header { background-color: #0E1117 !important; color: white !important; }
-        .stMarkdown, p, h1, h2, h3, span { color: white !important; }
-        input { color: white !important; background-color: #262730 !important; }
-        </style>
-        """, unsafe_allow_html=True)
-else:
-    chart_template = "plotly_white"
-    font_color = "black"
-    bg_color = "#FFFFFF"
-    st.markdown("""
-        <style>
-        /* 亮色模式：設定背景為純白，文字為純黑 */
-        [data-testid="stSidebar"], .stApp, header { background-color: #FFFFFF !important; color: black !important; }
-        .stMarkdown, p, h1, h2, h3, span { color: black !important; }
-        
-        /* 消除輸入框陰影，改用簡約淺灰色邊框 */
-        div[data-baseweb="input"], div[data-baseweb="input"] > div, div[data-baseweb="input"] input {
-            background-color: white !important;
-            border-color: #dcdcdc !important;
-            box-shadow: none !important;
-        }
+st.sidebar.markdown(
+    f"<hr style='border:none;border-top:1px solid {tok['divider']};margin:4px 0;'>",
+    unsafe_allow_html=True,
+)
 
-        /* 按鈕樣式：黑底白字，增加專業感 */
-        div.stButton > button {
-            background-color: #000000 !important;
-            border: 1px solid #000000 !important;
-            font-weight: bold !important;
-        }
-        div.stButton > button * {
-            color: #FFFFFF !important;
-        }
-        div.stButton > button:hover {
-            background-color: #333333 !important;
-        }
-
-        /* 側邊欄邊框調整 */
-        [data-testid="stSidebar"] { border-right: 1px solid #f0f2f6; }
-        input { color: black !important; background-color: white !important; }
-        </style>
-        """, unsafe_allow_html=True)
-
-st.sidebar.markdown("---")
-# SAR 核心參數：AF (加速因子)
-af_start = st.sidebar.slider("AF 起始值", min_value=0.01, max_value=0.10, value=0.02, step=0.01)
-af_max = st.sidebar.slider("AF 極限值", min_value=0.10, max_value=0.50, value=0.20, step=0.01)
-st.sidebar.markdown("---")
-# 收盤價容許度 (避免因盤中影線誤觸導致頻繁轉向)(收盤價確認機制參數)
-tolerance_pct = st.sidebar.slider("誤差容忍值%(預設1%)", min_value=0.0, max_value=5.0, value=1.0, step=0.5, format="%.1f%%")
+# 收盤價容許度 (避免因盤中影線誤觸導致頻繁轉向)(收盤價確認機制參數) —— 以 +/- 按鈕(number_input)取代滑桿
+tolerance_pct = st.sidebar.number_input(
+    "誤差容忍值%(預設1%)", min_value=0.0, max_value=5.0, value=1.0, step=0.5, format="%.1f"
+)
 up_tol = 1 - tolerance_pct / 100    # e.g. 1% → 0.99
 down_tol = 1 + tolerance_pct / 100  # e.g. 1% → 1.01
 
-# 定義分析按鈕
-analyze_btn = st.sidebar.button("開始分析")
+st.sidebar.markdown(
+    f"<hr style='border:none;border-top:1px solid {tok['divider']};margin:4px 0;'>",
+    unsafe_allow_html=True,
+)
 
-st.title("🚀 改良版 SAR 趨勢追蹤系統 (月K線版)")
+# 視覺主題切換：以按鈕切換整頁亮/深色（對應網頁背景）
+theme_label = "切換為深色" if not is_dark else "切換為亮色"
+theme_icon = ":material/dark_mode:" if not is_dark else ":material/light_mode:"
+theme_clicked = st.sidebar.button(theme_label, icon=theme_icon, type="secondary", use_container_width=True)
+
+# 開始計算觸發按鈕
+analyze_btn = st.sidebar.button("開始計算", type="primary", use_container_width=True)
+
+if theme_clicked:
+    st.session_state.is_dark = not st.session_state.is_dark
+    st.rerun()
 
 # ==============================================================================
-# 3. 數據抓取與計算邏輯
+# 5. 主程式執行邏輯
+# ==============================================================================
+
+st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:12px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="{tok['accent']}" stroke-width="1.6">
+        <path d="M3 17l5-6 4 3 6-9"/><path d="M14 5h5v5"/>
+      </svg>
+      <h1 style="margin:0;font-size:36px;">改良版 SAR 趨勢追蹤系統 (月K線版)</h1>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 6. 數據抓取與計算邏輯
 # ==============================================================================
 if not analyze_btn:
-    st.info("💡 請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始分析」即可產出圖表")
+    st.markdown(
+        f"<div style='color:{tok['text_muted']};font-size:15px;margin-top:12px;'>"
+        f"請點開左上角選單 [ >> ] 在左側面板設定參數後，按「開始計算」即可產出圖表</div>",
+        unsafe_allow_html=True,
+    )
 else:
     # 依序嘗試：原始代號 → .TW → .TWO
     candidates = [stock_id, f"{stock_id}.TW", f"{stock_id}.TWO"]
@@ -114,7 +278,11 @@ else:
 
     if search_id:
         # 顯示股票代碼
-        st.markdown(f"<h3 style='color: {font_color};'>{search_id}</h3>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='margin-top:4px;font-family:\"Cormorant Garamond\",serif;"
+            f"font-size:19px;color:{tok['text_muted']};'>{search_id}</div>",
+            unsafe_allow_html=True,
+        )
 
     if not data.empty:
         df = data.copy()
@@ -144,9 +312,9 @@ else:
         df['Open_1D'] = df['Open'].values.flatten()
 
         # --- 請刪除這一段 ---
-        # psar = df.ta.psar(high='High_1D', low='Low_1D', close='Close_1D', 
+        # psar = df.ta.psar(high='High_1D', low='Low_1D', close='Close_1D',
         #                   af0=af_start, af=af_start, max_af=af_max)
-        
+
         # if psar is not None:
         #     df['SAR_Long'] = psar.iloc[:, 0]
         #     df['SAR_Short'] = psar.iloc[:, 1]
@@ -157,7 +325,7 @@ else:
         # --- [取代為此段] 改良版 SAR 核心計算法 ---
         df['SAR'] = np.nan
         df['Trend'] = 0  # 趨勢標記：1 為多頭, -1 為空頭
-        
+
         # 初始趨勢判斷：若第一天收紅則初步看多
         initial_trend = 1 if df['Close_1D'].iloc[0] > df['Open_1D'].iloc[0] else -1
         curr_trend = initial_trend
@@ -171,15 +339,15 @@ else:
             c_high, c_low, c_close = df['High_1D'].iloc[i], df['Low_1D'].iloc[i], df['Close_1D'].iloc[i]
             df.iat[i, df.columns.get_loc('SAR')] = curr_sar
             df.iat[i, df.columns.get_loc('Trend')] = curr_trend
-            
+
             next_trend, next_af = curr_trend, curr_af
-            
+
             # --- 多頭趨勢判斷 ---
             if curr_trend == 1: # 上升趨勢(創新高)
                 if c_high > ep:
                     ep = c_high
                     next_af = min(curr_af + af_start, af_max) # 增加加速因子
-                
+
                 if c_low <= curr_sar: # 觸碰點位(盤中跌破 SAR)
                     # [改良邏輯] 若收盤價仍高於 SAR*容許比例，則不轉向，僅重置 AF 並調整 SAR 位置
                     if c_close > curr_sar * up_tol:
@@ -191,13 +359,13 @@ else:
                     next_sar = curr_sar + curr_af * (ep - curr_sar)
                     # 確保 SAR 不會高於前兩日低點
                     if i > 0: next_sar = min(next_sar, c_low, df['Low_1D'].iloc[i-1])
-            
+
             # --- 空頭趨勢判斷 ---
             else: # 下降趨勢(創新低)
                 if c_low < ep:
                     ep = c_low
                     next_af = min(curr_af + af_start, af_max)
-                
+
                 if c_high >= curr_sar: # 觸碰點位(盤中突破 SAR)
                     # [改良邏輯] 若收盤價仍低於 SAR*容許比例，不轉向
                     if c_close < curr_sar * down_tol:
@@ -218,26 +386,26 @@ else:
 
 
         # ==============================================================================
-        # 4. 繪圖與互動優化
+        # 7. 繪圖與互動優化
         # ==============================================================================
         fig = go.Figure()
 
         # 使用 Date_Str (字串日期) 當 X 軸，避開假日空隙
         fig.add_trace(go.Candlestick(
             x=df['Date_Str'], open=df['Open_1D'], high=df['High_1D'], low=df['Low_1D'], close=df['Close_1D'],
-            name='K線', increasing_line_color='#FF4136', decreasing_line_color='#2ECC40'
+            name='K線', increasing_line_color=tok['candle']['up'], decreasing_line_color=tok['candle']['down']
         ))
 
         # 多頭支撐點 (紅色)
         fig.add_trace(go.Scatter(
             x=df['Date_Str'], y=df['SAR_Long'], name='多頭支撐', mode='markers',
-            marker=dict(size=4, color='#FF4136', symbol='circle')
+            marker=dict(size=4, color=tok['candle']['up'], symbol='circle')
         ))
 
         # 空頭壓力點 (綠色)
         fig.add_trace(go.Scatter(
             x=df['Date_Str'], y=df['SAR_Short'], name='空頭壓力', mode='markers',
-            marker=dict(size=4, color='#2ECC40', symbol='circle')
+            marker=dict(size=4, color=tok['candle']['down'], symbol='circle')
         ))
 
         # 新增 rangebreaks 或將 xaxis 類型改為 category 以消除缺口
@@ -246,55 +414,58 @@ else:
             template=chart_template,
             xaxis_rangeslider_visible=False, # 隱藏滑動條讓圖表乾淨
             hovermode='x unified',
-            font=dict(color=font_color),
+            font=dict(color=tok['text'], family='Lora, serif'),
             # 關鍵修正：將 xaxis 類型設為 category，配合 Date_Str 使用以忽略非交易日
             xaxis=dict(
-                type='category', 
-                color=font_color, 
-                tickfont=dict(color=font_color),
+                type='category',
+                color=tok['text'],
+                tickfont=dict(color=tok['text']),
+                gridcolor=tok['grid_line'],
                 nticks=8  # 限制顯示的座標標籤數量，避免字體重疊
             ),
-            yaxis=dict(color=font_color, tickfont=dict(color=font_color)),
+            yaxis=dict(color=tok['text'], tickfont=dict(color=tok['text']), gridcolor=tok['grid_line']),
             legend=dict(
-                orientation="h", 
-                yanchor="bottom", 
-                y=1.02, 
-                xanchor="center", 
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
                 x=0.5,
-                font=dict(color=font_color)
+                font=dict(color=tok['text_muted'], family='Lora, serif')
             ),
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color 
+            paper_bgcolor=tok['surface_alt'],
+            plot_bgcolor=tok['surface_alt']
         )
-        
-        st.plotly_chart(fig, use_container_width=True)
+
+        with st.container(border=True):
+            st.plotly_chart(fig, use_container_width=True)
 
         # ==============================================================================
-        # 5. 數據摘要指標
+        # 8. 數據摘要指標
         # ==============================================================================
-        st.header("📊 最新狀態")
+        st.markdown("<h4 style='margin:28px 0 16px;'>最新狀態</h4>", unsafe_allow_html=True)
         valid_df = df.dropna(subset=['Close_1D'])
-        
+
         if not valid_df.empty:
             last_price = valid_df['Close_1D'].iloc[-1]
-            col1, col2, col3 = st.columns(3)
-            
+
             is_long = not pd.isna(df['SAR_Long'].iloc[-1])
             trend_text = "看漲 (多頭)" if is_long else "看跌 (空頭)"
-            trend_icon = "📈" if is_long else "📉"
             sar_val = df['SAR_Long'].iloc[-1] if is_long else df['SAR_Short'].iloc[-1]
             sar_label = "SAR 支撐位置" if is_long else "SAR 壓力位置"
 
-            with col1:
-                st.subheader("目前趨勢")
-                st.markdown(f"### {trend_icon} {trend_text}")
-            with col2:
-                st.subheader("收盤價")
-                st.markdown(f"### {last_price:.2f}")
-            with col3:
-                st.subheader(sar_label)
-                st.markdown(f"### {sar_val:.2f}")
-                
+            def _stat_card(label, value):
+                return f"""
+                <div style="border:1px solid {tok['divider']};border-radius:4px;padding:20px 22px;">
+                  <div style="font-size:12px;color:{tok['text_muted']};margin-bottom:8px;">{label}</div>
+                  <div style="font-family:'Cormorant Garamond',serif;font-size:28px;color:{tok['text']};font-variant-numeric:tabular-nums;">{value}</div>
+                </div>
+                """
+
+            col1, col2, col3 = st.columns(3)
+            col1.markdown(_stat_card("目前趨勢", trend_text), unsafe_allow_html=True)
+            col2.markdown(_stat_card("收盤價", f"{last_price:.2f}"), unsafe_allow_html=True)
+            col3.markdown(_stat_card(sar_label, f"{sar_val:.2f}"), unsafe_allow_html=True)
+
     else:
         st.error(f"找不到股票資料（已嘗試：{', '.join(candidates)}），請檢查代號或日期。")
 
