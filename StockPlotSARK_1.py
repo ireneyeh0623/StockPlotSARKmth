@@ -44,8 +44,8 @@ DARK_TOKENS = {
 is_dark = st.session_state.is_dark
 tok = DARK_TOKENS if is_dark else LIGHT_TOKENS
 chart_template = "plotly_dark" if is_dark else "plotly_white"
-# 亮色版 +/- 步進按鈕預設顏色改為白色（僅預設狀態，hover 顏色不變）；深色版維持原本設定
-step_btn_color = "#FFFFFF" if not is_dark else tok['text']
+# +/- 步進按鈕預設顏色改用強調色(accent)取代白色，避免使用者裝置/瀏覽器色彩設定造成白色按鈕看不見
+step_btn_color = tok['accent']
 
 # ==============================================================================
 # 3. 全域樣式（字型／配色／按鈕／輸入框／側邊欄版面）
